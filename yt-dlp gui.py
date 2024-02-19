@@ -16,7 +16,8 @@ from tkinter import font
 import pkgutil
 import pyautogui
 import glob
-
+import shutil
+special_mode=0
 padding = 30
 dossier=os.getcwd()
 file_cookie = ""
@@ -73,6 +74,7 @@ def load_url():
     url = e1.get()
     try:
         if file_cookie != "":
+            print("ok")
             ydl_opts = {
                 'noplaylist': True,
                 'playlistend': 0,
@@ -83,7 +85,10 @@ def load_url():
                 'listsubtitles': True,
                 'cookiefile': file_cookie,
                 'noprogress': True,
-                }
+                'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                                'Chrome/120.0.0.0'
+                                ' Safari/537.36'}}
         else:
             ydl_opts = {
                 'noplaylist': True,
@@ -100,6 +105,18 @@ def load_url():
         ydl_opts=""
         site = info.get('extractor', '')
         custom_font = font.Font(weight="bold", size=16)
+        bomb=""
+        try:
+            if "PLAYLIST" in site.upper().split(":")[1]:
+                bomb="a"
+            elif "TAB" in site.upper().split(":")[1]:
+                bomb="b"
+            elif "SEARCH_URL" in site.upper().split(":")[1]:
+                bomb="c"
+        except:
+            pass
+        if bomb != "":
+            int(bomb)
         l_name2 = ttk.Label(app, text=f'[ {site.upper()} ]', font=custom_font)
         l_name2.pack()
         custom_font = font.Font(weight="bold", size=16)
@@ -128,7 +145,7 @@ def load_url():
         formats = info.get('formats', [])
         pattern = r'[\\/:\*\?"<>\|\x00-\x1f\x7f\(\)\'\\]'
         video_name = re.sub(pattern, '', video_name)
-        video_name=video_name.replace(" ","_")
+        video_name=video_name.replace(" "," ")
         video_name=video_name.replace(":","_").replace("|","_").replace("[","").replace("]","").replace("ō","")
         qualities = []
         audio_languages = []
@@ -168,14 +185,18 @@ def load_url():
                     name_subtitles.append(info['subtitles'][i][0]['name'])
                 except:
                     name_subtitles.append("")
-        counter=0            
+        counter=0
+        print(subtitle_languages)
         for i in subtitle_languages:
             if name_subtitles[counter]=="":
-                langue = Language.get(i)
-                langue=str(langue.display_name())
-                if langue[0:16] != "Unknown language":
-                    name_subtitles[counter]=(langue)
-                else:
+                try:
+                    langue = Language.get(i)
+                    langue=str(langue.display_name())
+                    if langue[0:16] != "Unknown language":
+                        name_subtitles[counter]=(langue)
+                    else:
+                        del subtitle_languages[counter]
+                except:
                     del subtitle_languages[counter]
             counter+=1
         l9.pack_forget()
@@ -281,24 +302,55 @@ def load_url():
                 current_line = word + " "
         lines.append(current_line.strip())
         e="\n".join(lines)
+        try:
+            l_name.pack_forget()
+        except:
+            pass
+        try:
+            l_name2.pack_forget()
+        except:
+            pass
         lerror.config(text=e, font=errfont)
         lerror.pack()
         app.update()
         b1.config(state="normal")
         b5.config(state="normal")
     except FileNotFoundError or UnicodeDecodeError as e:
+        try:
+            l_name.pack_forget()
+        except:
+            pass
+        try:
+            l_name2.pack_forget()
+        except:
+            pass
         lerror.config(text=": Invalide Cokkies File :")
         lerror.pack()
         app.update()
         b1.config(state="normal")
         b5.config(state="normal")
     except Exception as e:
+        try:
+            l_name.pack_forget()
+        except:
+            pass
+        try:
+            l_name2.pack_forget()
+        except:
+            pass
+        if "'a'" in str(e):
+            e="PLAYLIST is currently not supported !"
+        elif "'b'" in str(e):
+            e="PLAYLIST/TAB is currently not supported!"
+        elif "'c'" in str(e):
+            e="SEARCH_URL is currently not supported!"
         lerror.config(text=e)
         lerror.pack()
         app.update()
         b1.config(state="normal")
         b5.config(state="normal")
 def download_video():
+    global special_mode
     try:
         p1['value'] = 0
         l6.config(text="Starting download")
@@ -332,78 +384,98 @@ def download_video():
         else:
             formats=f"bestvideo[ext=mp4][width={width}][height={height}]+bestaudio[ext=m4a]/best[ext=mp4][width={width}][height={height}]"
         
-        video_name2=video_name+".tempmp4"
+        video_name2=video_name
         subs_lang.append("-live_chat")
-        if file_cookie != "":
-            ydl_opts = {
-                "embedsubs": True,
+        ydl_opts = {
                 'noplaylist': True,
                 'cachedir': r'C:\Users\Célestin\Desktop\traduction\test\trad\cache',
-                'postprocessors': [{
-                        'key': 'FFmpegEmbedSubtitle',
-                        'already_have_subtitle': False,
-                }],
                 'writesubtitles' : True,
+                'outtmpl' : f'{video_name2}\{video_name2}.mp4',
+                'subtitleslangs': subs_lang,
+                'format': formats,
+                'progress_hooks': [progress_hook],
+                'quiet': True,
                 'verbose': True,
-                'outtmpl' : f'\{video_name}\{video_name}.mp4',
-                'subtitleslangs': subs_lang,
-                'format': formats,
-                'progress_hooks': [progress_hook],
-                'playlistend': 1,
-                'cookiefile': file_cookie,
                 'no_color': True,
-                'quiet': True,
+                'playlistend': 1,
                 'noprogress': True,
                 }
-        else:
-            ydl_opts = {
-                'noplaylist': True,
-                'cachedir': r'C:\Users\Célestin\Desktop\traduction\test\trad\cache',
+        if file_cookie != "":
+            ydl_opts.update({
+                "embedsubs": True,
+                'cookiefile': file_cookie,
+                })            
+        if special_mode ==0:
+            ydl_opts.update({
                 'postprocessors': [{
                         'key': 'FFmpegEmbedSubtitle',
                         'already_have_subtitle': False,
-                }],
-                'writesubtitles' : True,
-                'outtmpl' : f'{video_name}\{video_name}.mp4',
-                'subtitleslangs': subs_lang,
-                'format': formats,
-                'progress_hooks': [progress_hook],
-                'quiet': True,
-                'no_color': True,
-                'playlistend': 1,
-                'noprogress': True,
-                }
+                }]})
     except:
         b3.config(state="normal")
         b4.config(state="normal")
         l6.config(text="")
+    #print(video_name2)
     try: 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
+        #sub crunchy
+        if special_mode == 1:
+            import binascii
+            b64name=binascii.hexlify(video_name2.encode()).decode()
+            try:
+                if len(subs_lang) > 1:
+                    subprocess.call(f"python subs_merge.py {b64name}")
+                    for f in glob.glob(f"{video_name2}\*.ass") + glob.glob(f"{video_name2}\*.vtt") + glob.glob(f"{video_name2}\*.mp4"):
+                        os.remove(f)
+            except Exception as e:
+                print(e)
+        #sub crunchy
         ydl_opts=""
-        """
-	try:
-            if len(subs_lang) > 1:
-                subprocess.call(f'python subs_merge.py {video_name}')
-                for f in glob.glob(f"{video_name}\*.ass") + glob.glob(f"{video_name}\*.vtt") + glob.glob(f"{video_name}\*.mp4"):
-                    os.remove(f)
-                video_name3=video_name.replace("_"," ")
-                d=video_name.replace(" ","_")
-                d2=d.replace("_"," ")
-                filename=(video_name)
-                filename_2=video_name.replace("_"," ")
-                os.rename(f'{d}',f'{d2}')
-                os.rename(fr'{d2}\{filename}.mkv',fr'{d2}\{filename_2}.mkv')
-        except:
-            pass
-	"""
         b3.config(state="normal")
         b4.config(state="normal")
         l6.config(text="Downloading finished !")
-    except Exception as e:
-        b3.config(state="normal")
-        b4.config(state="normal")
-        l6.config(text="An ERROR occured")
+    except:
+        l6.config(text="Retrying downloading")
+        try:
+            shutil.rmtree(video_name2)
+        except:
+            pass
+        try:
+            azj=-1
+            while True:
+                azj+=1
+                if os.path.exists(f"video{azj}"):
+                    pass
+                else:
+                    video_name2=f"video{azj}"
+                    break
+            if special_mode ==0:
+                azertyy="mp4"
+            elif special_mode ==1:
+                azertyy="mkv"
+            ydl_opts.update({'outtmpl' : f'{video_name2}\{video_name2}.mp4'})
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            ydl_opts=""
+            if special_mode == 1:
+                import binascii
+                b64name=binascii.hexlify(video_name2.encode()).decode()
+                try:
+                    if len(subs_lang) > 1:
+                        subprocess.call(f"python subs_merge.py {b64name}")
+                        for f in glob.glob(f"{video_name2}\*.ass") + glob.glob(f"{video_name2}\*.vtt") + glob.glob(f"{video_name2}\*.mp4"):
+                            os.remove(f)
+                except Exception as e:
+                    print(e)
+            b3.config(state="normal")
+            b4.config(state="normal")
+            l6.config(text=fr"Downloading finished !     [ Due to the Filename/Foldername name lenght limit your video was downloaded at : {video_name2}\{video_name2}.{azertyy} ]")
+        except Exception as e:
+            print(e)
+            b3.config(state="normal")
+            b4.config(state="normal")
+            l6.config(text="An ERROR occured")
 def threading():
     t1=Thread(target=download_video)
     t1.start()
@@ -523,9 +595,3 @@ lerror= ttk.Label(app, anchor='center', text='')
 lerror.pack()
 app.mainloop()
 exit()
-"""
-'postprocessors': [{
-    'key': 'FFmpegEmbedSubtitle'
-    'already_have_subtitle': False,
-}],
-"""
